@@ -1,9 +1,8 @@
 package main
 
-// Importing necessary packages from the Go standard library
 import (
-	"bufio"   // For buffered input from the user
-	"fmt"     // For formatted I/O, like printing to the screen
+	"bufio" // For buffered input from the user
+	"fmt"
 	"os"      // For accessing operating system features like stdin
 	"strings" // For string manipulation
 	"time"    // For working with dates and times
