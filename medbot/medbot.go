@@ -7,51 +7,82 @@ import (
 	"time"
 )
 
+// USER STRUCT AND METHODS
+
+/*
+User represents a patient using the chatbot. It contains basic personal data,
+a cart for pharmacy purchases, and interaction history.
+*/
 type User struct {
 	ID      int
 	Name    string
-	Cart    []Pharmacy
-	History []string
+	Cart    []Pharmacy // Composition: Cart is composed of Pharmacy items
+	History []string   // Stores all user interactions
 }
 
+/*
+AddToCart adds a medication to the user's cart.
+Demonstrates encapsulation: Cart is modified through a method.
+*/
+func (user *User) AddToCart(med Pharmacy) {
+	user.Cart = append(user.Cart, med)
+}
+
+// ViewCart returns a string listing all the items in the cart.
+func (user *User) ViewCart() string {
+	var response strings.Builder
+	if len(user.Cart) == 0 {
+		return "Your cart is empty."
+	}
+
+	response.WriteString("Your cart contains the following items:\n")
+	for _, item := range user.Cart {
+		response.WriteString(fmt.Sprintf("- %s: $%d\n", item.Med, item.Price))
+	}
+	return response.String()
+}
+
+// Checkout finalizes the purchase, returns the total cost, and clears the cart.
+func (user *User) Checkout() string {
+	var total int
+	for _, item := range user.Cart {
+		total += item.Price
+	}
+	user.Cart = []Pharmacy{} // Clear the cart
+	return fmt.Sprintf("Your total is $%d. Thank you for your purchase!", total)
+}
+
+// CORE DOMAIN STRUCTS
+
+/*
+Query represents a user message, including metadata like timestamp and user ID.
+It forms part of the conversation context.
+*/
 type Query struct {
 	UserID    int
 	Timestamp time.Time
 	Content   string
 }
 
+// Response represents the chatbot's reply, with a timestamp for logging.
 type Response struct {
 	Content string
 	Time    time.Time
 }
 
+/*
+Chatbot encapsulates the bot. Contains bot name, access to a medical database,
+and stores the ongoing conversation history.
+*/
 type Chatbot struct {
 	Name string
-	Base MedDataBase
-	Conv []Query
+	Base MedDataBase // Composition: Chatbot uses a MedDataBase
+	Conv []Query     // Stores the full query log
 }
 
-type MedDataBase struct{}
+// CHATBOT BEHAVIOR
 
-type Doctor struct {
-	Name   string
-	Field  string
-	Rating string
-	City   string
-}
-
-type Appointment struct {
-	DoctorName  string
-	DoctorField string
-	Date        time.Time
-}
-
-type Pharmacy struct {
-	Med       string
-	Price     int
-	Available int
-}
-
+// Demonstrates behavioral encapsulation: user interaction is handled internally.
 func (cb *Chatbot) ReceiveInput(user *User, input string) Query {
 	query := Query{
 		UserID:    user.ID,
@@ -63,10 +94,12 @@ func (cb *Chatbot) ReceiveInput(user *User, input string) Query {
 	return query
 }
 
+// Demonstrates polymorphism and control flow based on user intent.
 func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
 	var content string
 	lowerInput := strings.ToLower(query.Content)
 
+	// Intent recognition via pattern matching
 	switch {
 	case lowerInput == "help":
 		content = "You can ask me about your symptoms, or you can ask for a list of doctors. For example:\n" +
@@ -112,7 +145,12 @@ func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
 	}
 }
 
-func (db *MedDataBase) GetInfo(topic string) string {
+// DATABASE: Encapsulation of Medical Knowledge and Services
+
+type MedDataBase struct{} // Acts as a service layer
+
+// GetInfo returns health advice based on a given symptom keyword.
+func (md *MedDataBase) GetInfo(topic string) string {
 	data := map[string]string{
 		"headache":   "Use a hot or cold compress on your head or neck. Try gentle massage. Drink small amounts of caffeine. Take over-the-counter pain relievers like ibuprofen or aspirin.",
 		"fever":      "If you have a fever rest, stay hydrated, and take fever-reducing medicine like acetaminophen or ibuprofen.",
@@ -129,6 +167,15 @@ func (db *MedDataBase) GetInfo(topic string) string {
 	return "Sorry, I have no information on that."
 }
 
+// Doctor struct represents a physician. Part of the database, not behavior-heavy.
+type Doctor struct {
+	Name   string
+	Field  string
+	Rating string
+	City   string
+}
+
+// SuggestDoctor recommends a doctor from a hardcoded list based on specialization.
 func (md *MedDataBase) SuggestDoctor(field string) string {
 	doctors := []Doctor{
 		{"Dr. Smith", "General", "4.7", "New York"},
@@ -145,6 +192,7 @@ func (md *MedDataBase) SuggestDoctor(field string) string {
 	return "Sorry, no doctor found for that speciality."
 }
 
+// ListDoctors returns a string listing all available doctors.
 func (md *MedDataBase) ListDoctors() string {
 	doctors := []Doctor{
 		{"Dr. Smith", "General", "4.7", "New York"},
@@ -162,7 +210,6 @@ func (md *MedDataBase) ListDoctors() string {
 				i+1, d.Name, d.Field, d.City, d.Rating),
 		)
 	}
-
 	return response.String()
 }
 
@@ -192,6 +239,16 @@ func (md *MedDataBase) SelectDoctor(input string) string {
 		selectedDoctor.Name, selectedDoctor.Field, selectedDoctor.City, selectedDoctor.Rating, appointmentDate.Format("Monday, January 2, 2006"))
 }
 
+// PHARMACY STRUCTS AND LOGIC
+
+// Pharmacy represents a medication item in the virtual pharmacy.
+type Pharmacy struct {
+	Med       string
+	Price     int
+	Available int
+}
+
+// This also modifies the User's Cart, demonstrating behavior interaction between structs.
 func (md *MedDataBase) CheckPharmacy(input string, user *User) string {
 	pharmacyItems := []Pharmacy{
 		{"Ibuprofen", 10, 20},
@@ -213,9 +270,8 @@ func (md *MedDataBase) CheckPharmacy(input string, user *User) string {
 					user.AddToCart(item)
 					pharmacyItems[i].Available--
 					return fmt.Sprintf("%s has been added to your cart.", item.Med)
-				} else {
-					return fmt.Sprintf("Sorry, %s is out of stock.", item.Med)
 				}
+				return fmt.Sprintf("Sorry, %s is out of stock.", item.Med)
 			}
 		}
 		return "Medication not found."
@@ -228,35 +284,5 @@ func (md *MedDataBase) CheckPharmacy(input string, user *User) string {
 			fmt.Sprintf("- %s: $%d (Availability: %d)\n", item.Med, item.Price, item.Available),
 		)
 	}
-
 	return response.String()
-}
-
-func (user *User) AddToCart(med Pharmacy) {
-	user.Cart = append(user.Cart, med)
-}
-
-func (user *User) ViewCart() string {
-	var response strings.Builder
-	if len(user.Cart) == 0 {
-		return "Your cart is empty."
-	}
-
-	response.WriteString("Your cart contains the following items:\n")
-	for _, item := range user.Cart {
-		response.WriteString(fmt.Sprintf("- %s: $%d\n", item.Med, item.Price))
-	}
-
-	return response.String()
-}
-
-func (user *User) Checkout() string {
-	var total int
-	for _, item := range user.Cart {
-		total += item.Price
-	}
-
-	user.Cart = []Pharmacy{}
-
-	return fmt.Sprintf("Your total is $%d. Thank you for your purchase!", total)
 }

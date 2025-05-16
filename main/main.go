@@ -12,10 +12,9 @@ import (
 
 func main() {
 
-	// This simulates the person chatting with the bot
 	user := medbot.User{
-		ID:   1,       // Give the user an ID
-		Name: "Alice", // Give the user a name
+		ID:   1,
+		Name: "Dmytro",
 	}
 
 	// It has a name and a base database
@@ -38,7 +37,7 @@ func main() {
 		if err != nil {
 			// Handle any error that occurred while reading input
 			fmt.Println("Error reading input:", err)
-			continue // Skip this iteration and wait for new input
+			continue
 		}
 
 		// Remove any leading whitespace

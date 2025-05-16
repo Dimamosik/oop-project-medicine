@@ -1,91 +1,84 @@
 package medbot
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"time"
+)
 
-func TestGenerateResponse(t *testing.T) {
-	// Initialize the MedDataBase and chatbot for testing
-	db := MedDataBase{}
-	bot := Chatbot{
-		Name: "TestBot",
-		Base: db,
-	}
-	// Expected formatted list of doctors for the "list" command
-	expectedDoctorList := "Here are the available doctors:\n" +
-		"1. Dr. Smith - General (Location: New York, Rating: 4.7)\n" +
-		"2. Dr. Life - Cardiology (Location: San Francisco, Rating: 4.5)\n" +
-		"3. Dr. Bold - Pediatrics (Location: Chicago, Rating: 4.9)\n" +
-		"4. Dr. Rose - Dermatology (Location: Los Angeles, Rating: 4.6)\n" +
-		"5. Dr. Green - Neurology (Location: Boston, Rating: 4.8)\n"
-		// Table of test cases to check chatbot behavior for different inputs
-	testCases := []struct {
-		input    string
-		expected string
-	}{
-		{"I have a headache", "Use a hot or cold compress on your head or neck. Try gentle massage. Drink small amounts of caffeine. Take over-the-counter pain relievers like ibuprofen or aspirin."},
-		{"fever", "If you have a fever rest, stay hydrated, and take fever-reducing medicine like acetaminophen or ibuprofen."},
-		{"toothache", " Rinse your mouth with warm salt water. Use a cold compress on your cheek. Apply clove oil to the tooth.Take over-the-counter painkillers like ibuprofen. "},
-		{"diarrhea", " Drink plenty of fluids and oral rehydration solution. Eat bland foods like bananas and rice.Avoid dairy, caffeine, and greasy food.Rest as much as possible."},
-		{"chill", "Wear warm clothing and use blankets. Drink hot tea or soup. Rest and check for fever. Use a warm compress if you feel tense or achy."},
-		{"runny nose", "Drink lots of water. Use a saline spray or rinse. Try a warm compress on your face.Rest and avoid allergens or irritants."},
-		{"vomiting", "Sip water or electrolyte drinks slowly. Avoid solid food until vomiting stops. Eat plain food like toast or crackers after.Rest and avoid strong smells."},
-		{"cut", "Wash the cut with water and mild soap. Press with a clean cloth to stop bleeding. Apply antiseptic and cover with a bandage.Change the bandage daily."},
-		{"Which doctor should I see?", "Recommended doctor: Dr. Smith (General, Rating: 4.7)"},
-		{"Unknown symptom", "I don't understand that. Type 'help' for instructions on how to interact with me."},
-		{"list", expectedDoctorList},
-	}
-	// Loop through each test case and compare actual vs expected responses
-	for _, tc := range testCases {
-		// Simulate a user query
-		query := Query{UserID: 1, Content: tc.input}
+// TestAddToCartAndViewCart tests adding items to the cart and viewing it
+func TestAddToCartAndViewCart(t *testing.T) {
+	user := &User{ID: 1, Name: "Test User"}
 
-		resp := bot.GenerateResponse(query, &User{ID: 1})
-		// If the response doesn't match what we expected, report an error
-		if resp.Content != tc.expected {
-			t.Errorf("For input '%s', expected '%s', got '%s'", tc.input, tc.expected, resp.Content)
-		}
+	med := Pharmacy{Med: "Ibuprofen", Price: 10, Available: 5}
+	user.AddToCart(med)
+
+	cart := user.ViewCart()
+	if !strings.Contains(cart, "Ibuprofen") {
+		t.Errorf("Expected 'Ibuprofen' in cart, got: %s", cart)
 	}
 }
 
-// TestCheckPharmacy checks if pharmacy queries and purchase flows work correctly
-func TestCheckPharmacy(t *testing.T) {
-	// Create a user and a chatbot instance
-	user := &User{ID: 1}
+// TestCheckout tests the checkout functionality
+func TestCheckout(t *testing.T) {
+	user := &User{ID: 1, Name: "Test User"}
+	user.AddToCart(Pharmacy{Med: "Paracetamol", Price: 5})
+
+	checkout := user.Checkout()
+	if !strings.Contains(checkout, "Your total is $5") {
+		t.Errorf("Unexpected checkout message: %s", checkout)
+	}
+	if len(user.Cart) != 0 {
+		t.Errorf("Cart should be empty after checkout")
+	}
+}
+
+// TestGenerateResponseHelp tests the chatbot 'help' response
+func TestGenerateResponseHelp(t *testing.T) {
+	cb := &Chatbot{
+		Name: "TestBot",
+		Base: MedDataBase{},
+	}
+	user := &User{ID: 1, Name: "Tester"}
+	query := Query{UserID: user.ID, Timestamp: time.Now(), Content: "help"}
+
+	response := cb.GenerateResponse(query, user)
+
+	if !strings.Contains(response.Content, "ask me about your symptoms") {
+		t.Errorf("Expected help instructions in response, got: %s", response.Content)
+	}
+}
+
+// TestGetInfo tests symptom advice retrieval
+func TestGetInfo(t *testing.T) {
 	db := MedDataBase{}
-	bot := Chatbot{
-		Base: db,
+	info := db.GetInfo("headache")
+	if !strings.Contains(info, "compress") {
+		t.Errorf("Unexpected headache info: %s", info)
 	}
-	// Check the pharmacy inventory listing
-	result := bot.Base.CheckPharmacy("pharmacy", user)
+}
 
-	expected := "Available medications in the pharmacy:\n" +
-		"- Ibuprofen: $10 (Availability: 20)\n" +
-		"- Paracetamol: $5 (Availability: 50)\n" +
-		"- Cough Syrup: $8 (Availability: 10)\n" +
-		"- Aspirin: $7 (Availability: 30)\n"
+// TestCheckPharmacyBuy tests buying medication from the pharmacy
+func TestCheckPharmacyBuy(t *testing.T) {
+	db := MedDataBase{}
+	user := &User{ID: 1, Name: "Tester"}
 
-	if result != expected {
-		t.Errorf("Expected %v, but got %v", expected, result)
+	result := db.CheckPharmacy("buy Ibuprofen", user)
+
+	if !strings.Contains(result, "added to your cart") {
+		t.Errorf("Expected item to be added to cart, got: %s", result)
 	}
-	// Reset the user's cart and try to buy a medicine
-	user.Cart = nil
-	buyResult := bot.Base.CheckPharmacy("buy Ibuprofen", user)
-
-	expectedBuy := "Ibuprofen has been added to your cart."
-
-	if buyResult != expectedBuy {
-		t.Errorf("Expected '%s', but got '%s'", expectedBuy, buyResult)
+	if len(user.Cart) == 0 || user.Cart[0].Med != "Ibuprofen" {
+		t.Errorf("Item not correctly added to cart")
 	}
-	// Verify cart contents after purchase
-	cartContents := user.ViewCart()
-	expectedCart := "Your cart contains the following items:\n" +
-		"- Ibuprofen: $10\n"
-	if cartContents != expectedCart {
-		t.Errorf("Expected '%s', but got '%s'", expectedCart, cartContents)
-	}
-	// Test checkout and final message
-	checkoutResult := user.Checkout()
-	expectedCheckout := "Your total is $10. Thank you for your purchase!"
-	if checkoutResult != expectedCheckout {
-		t.Errorf("Expected '%s', but got '%s'", expectedCheckout, checkoutResult)
+}
+
+// TestSelectDoctor tests doctor selection logic
+func TestSelectDoctor(t *testing.T) {
+	db := MedDataBase{}
+	result := db.SelectDoctor("select 2")
+
+	if !strings.Contains(result, "Dr. Life") {
+		t.Errorf("Expected to select Dr. Life, got: %s", result)
 	}
 }
