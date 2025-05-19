@@ -11,7 +11,7 @@ func TestAddToCartAndViewCart(t *testing.T) {
 	user := &User{ID: 1, Name: "Test User"}
 
 	med := Pharmacy{Med: "Ibuprofen", Price: 10, Available: 5}
-	user.AddToCart(med)
+	user.AddToCart(med, 1)
 
 	cart := user.ViewCart()
 	if !strings.Contains(cart, "Ibuprofen") {
@@ -22,7 +22,7 @@ func TestAddToCartAndViewCart(t *testing.T) {
 // TestRemoveFromCart test the removal functionality
 func TestRemoveFromCart(t *testing.T) {
 	user := &User{ID: 1, Name: "Test User"}
-	user.AddToCart(Pharmacy{Med: "Ibuprofen", Price: 10})
+	user.AddToCart(Pharmacy{Med: "Ibuprofen", Price: 10}, 1)
 
 	msg := user.RemoveFromCart("Ibubprofen")
 	if !strings.Contains(msg, "removed from your cart") {
@@ -37,7 +37,7 @@ func TestRemoveFromCart(t *testing.T) {
 // TestCheckout tests the checkout functionality
 func TestCheckout(t *testing.T) {
 	user := &User{ID: 1, Name: "Test User"}
-	user.AddToCart(Pharmacy{Med: "Paracetamol", Price: 5})
+	user.AddToCart(Pharmacy{Med: "Paracetamol", Price: 5}, 3)
 
 	checkout := user.Checkout()
 	if !strings.Contains(checkout, "Your total is $5") {

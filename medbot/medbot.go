@@ -24,21 +24,32 @@ type User struct {
 AddToCart adds a medication to the user's cart.
 Demonstrates encapsulation: Cart is modified through a method.
 */
-func (user *User) AddToCart(med Pharmacy) {
+func (user *User) AddToCart(med Pharmacy, quantity int) {
+	for i, item := range user.Cart {
+		if strings.EqualFold(item.Med, med.Med) {
+			user.Cart[i].Quantity += quantity
+			return
+		}
+	}
+	med.Quantity = quantity
 	user.Cart = append(user.Cart, med)
 }
 
 // ViewCart returns a string listing all the items in the cart.
 func (user *User) ViewCart() string {
-	var response strings.Builder
 	if len(user.Cart) == 0 {
 		return "Your cart is empty."
 	}
 
+	var response strings.Builder
+	var total int
 	response.WriteString("Your cart contains the following items:\n")
 	for _, item := range user.Cart {
-		response.WriteString(fmt.Sprintf("- %s: $%d\n", item.Med, item.Price))
+		subtotal := item.Price * item.Quantity
+		total += subtotal
+		response.WriteString(fmt.Sprintf("- %s x%d: $%d\n", item.Med, item.Quantity, subtotal))
 	}
+	response.WriteString(fmt.Sprintf("Total: $%d", total))
 	return response.String()
 }
 
@@ -46,7 +57,7 @@ func (user *User) ViewCart() string {
 func (user *User) Checkout() string {
 	var total int
 	for _, item := range user.Cart {
-		total += item.Price
+		total += item.Price * item.Quantity
 	}
 	user.Cart = []Pharmacy{} // Clear the cart
 	return fmt.Sprintf("Your total is $%d. Thank you for your purchase!", total)
@@ -264,32 +275,42 @@ type Pharmacy struct {
 	Med       string
 	Price     int
 	Available int
+	Quantity  int
 }
 
 // This also modifies the User's Cart, demonstrating behavior interaction between structs.
 func (md *MedDataBase) CheckPharmacy(input string, user *User) string {
 	pharmacyItems := []Pharmacy{
-		{"Ibuprofen", 10, 20},
-		{"Paracetamol", 5, 50},
-		{"Cough Syrup", 8, 10},
-		{"Aspirin", 7, 30},
+		{"Ibuprofen", 10, 20, 0},
+		{"Paracetamol", 5, 50, 0},
+		{"Cough Syrup", 8, 10, 0},
+		{"Aspirin", 7, 30, 0},
 	}
 
-	if strings.Contains(input, "buy") {
+	if strings.HasPrefix(strings.ToLower(input), "buy") {
 		parts := strings.Fields(input)
 		if len(parts) < 2 {
-			return "Please specify the medication you want to buy (e.g., 'buy Ibuprofen')."
+			return "Please specify the medication (e.g., 'buy Ibuprofen 2')."
 		}
 
-		medName := strings.Join(parts[1:], " ")
+		medName := parts[1]
+		quantity := 1 // Default
+
+		if len(parts) >= 3 {
+			q, err := strconv.Atoi(parts[2])
+			if err == nil && q > 0 {
+				quantity = q
+			}
+		}
+
 		for i, item := range pharmacyItems {
 			if strings.EqualFold(item.Med, medName) {
-				if item.Available > 0 {
-					user.AddToCart(item)
-					pharmacyItems[i].Available--
-					return fmt.Sprintf("%s has been added to your cart.", item.Med)
+				if item.Available >= quantity {
+					user.AddToCart(item, quantity)
+					pharmacyItems[i].Available -= quantity
+					return fmt.Sprintf("%d x %s has been added to your cart.", quantity, item.Med)
 				}
-				return fmt.Sprintf("Sorry, %s is out of stock.", item.Med)
+				return fmt.Sprintf("Sorry, only %d %s available.", item.Available, item.Med)
 			}
 		}
 		return "Medication not found."
@@ -298,9 +319,7 @@ func (md *MedDataBase) CheckPharmacy(input string, user *User) string {
 	var response strings.Builder
 	response.WriteString("Available medications in the pharmacy:\n")
 	for _, item := range pharmacyItems {
-		response.WriteString(
-			fmt.Sprintf("- %s: $%d (Availability: %d)\n", item.Med, item.Price, item.Available),
-		)
+		response.WriteString(fmt.Sprintf("- %s: $%d (Availability: %d)\n", item.Med, item.Price, item.Available))
 	}
 	return response.String()
 }
