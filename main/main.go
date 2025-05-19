@@ -23,8 +23,9 @@ func main() {
 		Base: medbot.MedDataBase{}, // Provide an instance of the medical database
 	}
 
-	fmt.Println("\nWelcome to MedBot. Ask me a question. (type 'help' for information)")
-
+	fmt.Println("\nWelcome to MedBot - your vitual medical assistant.")
+	fmt.Println(" Type 'help' to see what i can do or 'exit' to leave.")
+	fmt.Println()
 	// Create a buffered reader to read user input from the terminal
 	reader := bufio.NewReader(os.Stdin)
 

@@ -19,6 +19,21 @@ func TestAddToCartAndViewCart(t *testing.T) {
 	}
 }
 
+// TestRemoveFromCart test the removal functionality
+func TestRemoveFromCart(t *testing.T) {
+	user := &User{ID: 1, Name: "Test User"}
+	user.AddToCart(Pharmacy{Med: "Ibuprofen", Price: 10})
+
+	msg := user.RemoveFromCart("Ibubprofen")
+	if !strings.Contains(msg, "removed from your cart") {
+		t.Errorf("Expected removal confirmation, got: %s", msg)
+	}
+
+	if len(user.Cart) != 0 {
+		t.Errorf("Expected cart to be empty after removal")
+	}
+}
+
 // TestCheckout tests the checkout functionality
 func TestCheckout(t *testing.T) {
 	user := &User{ID: 1, Name: "Test User"}

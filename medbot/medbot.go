@@ -52,6 +52,16 @@ func (user *User) Checkout() string {
 	return fmt.Sprintf("Your total is $%d. Thank you for your purchase!", total)
 }
 
+func (user *User) RemoveFromCart(medName string) string {
+	for i, item := range user.Cart {
+		if strings.EqualFold(item.Med, medName) {
+			user.Cart = append(user.Cart[:i], user.Cart[i+1])
+			return fmt.Sprintf("%s has been removed from your cart.", item.Med)
+		}
+	}
+	return fmt.Sprintf("%s was not found in your cart.", medName)
+}
+
 // CORE DOMAIN STRUCTS
 
 /*
@@ -103,9 +113,9 @@ func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
 	switch {
 	case lowerInput == "help":
 		content = "You can ask me about your symptoms, or you can ask for a list of doctors. For example:\n" +
-			"- Type 'list' to see a list of doctors.\n" +
+			"- Type 'list' to see a list of doctors or you can type recommend.\n" +
 			"- Ask about symptoms like 'headache' or 'fever' to get advice on how to deal with them.\n" +
-			"- You can also inquire about medications available in our pharmacy or buy them directly.\n" +
+			"- You can buy medicines using 'buy <medication>' or remove with 'remove <medication>'.\n" +
 			"- Type 'view cart' to see items in your cart or 'checkout' to complete your purchase."
 	case strings.Contains(lowerInput, "headache"):
 		content = cb.Base.GetInfo("headache")
@@ -123,7 +133,7 @@ func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
 		content = cb.Base.GetInfo("vomiting")
 	case strings.Contains(lowerInput, "cut"):
 		content = cb.Base.GetInfo("cut")
-	case strings.Contains(lowerInput, "doctor"):
+	case strings.Contains(lowerInput, "recommend"):
 		content = cb.Base.SuggestDoctor("general")
 	case strings.Contains(lowerInput, "list"):
 		content = cb.Base.ListDoctors()
@@ -131,6 +141,14 @@ func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
 		content = cb.Base.SelectDoctor(query.Content)
 	case strings.Contains(lowerInput, "pharmacy") || strings.HasPrefix(lowerInput, "buy"):
 		content = cb.Base.CheckPharmacy(query.Content, user)
+	case strings.HasPrefix(lowerInput, "remove"):
+		parts := strings.Fields(query.Content)
+		if len(parts) < 2 {
+			content = "Please specify the medication you want to remove (e.g., 'remove Ibuprofen'.)"
+		} else {
+			medName := strings.Join(parts[1:], " ")
+			content = user.RemoveFromCart(medName)
+		}
 	case strings.Contains(lowerInput, "view cart"):
 		content = user.ViewCart()
 	case strings.Contains(lowerInput, "checkout"):
@@ -149,6 +167,14 @@ func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
 
 type MedDataBase struct{} // Acts as a service layer
 
+// Doctor struct represents a physician. Part of the database, not behavior-heavy.
+type Doctor struct {
+	Name   string
+	Field  string
+	Rating string
+	City   string
+}
+
 // GetInfo returns health advice based on a given symptom keyword.
 func (md *MedDataBase) GetInfo(topic string) string {
 	data := map[string]string{
@@ -165,14 +191,6 @@ func (md *MedDataBase) GetInfo(topic string) string {
 		return info
 	}
 	return "Sorry, I have no information on that."
-}
-
-// Doctor struct represents a physician. Part of the database, not behavior-heavy.
-type Doctor struct {
-	Name   string
-	Field  string
-	Rating string
-	City   string
 }
 
 // SuggestDoctor recommends a doctor from a hardcoded list based on specialization.
