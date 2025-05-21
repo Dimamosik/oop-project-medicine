@@ -20,17 +20,16 @@ func TestAddToCartAndViewCart(t *testing.T) {
 }
 
 // TestRemoveFromCart test the removal functionality
-func TestRemoveFromCart(t *testing.T) {
+func TestRemoveSpecificQuantityFromCart(t *testing.T) {
 	user := &User{ID: 1, Name: "Test User"}
-	user.AddToCart(Pharmacy{Med: "Ibuprofen", Price: 10}, 1)
+	user.AddToCart(Pharmacy{Med: "Ibuprofen", Price: 10}, 3)
 
-	msg := user.RemoveFromCart("Ibubprofen")
-	if !strings.Contains(msg, "removed from your cart") {
-		t.Errorf("Expected removal confirmation, got: %s", msg)
+	msg := user.RemoveFromCart("Ibuprofen", 2)
+	if !strings.Contains(msg, "2 unit(s) of Ibuprofen removed") {
+		t.Errorf("Unexpected message: %s", msg)
 	}
-
-	if len(user.Cart) != 0 {
-		t.Errorf("Expected cart to be empty after removal")
+	if user.Cart[0].Quantity != 1 {
+		t.Errorf("Expected quantity to be 1, got: %d", user.Cart[0].Quantity)
 	}
 }
 

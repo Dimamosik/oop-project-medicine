@@ -63,14 +63,25 @@ func (user *User) Checkout() string {
 	return fmt.Sprintf("Your total is $%d. Thank you for your purchase!", total)
 }
 
-func (user *User) RemoveFromCart(medName string) string {
-	for i, item := range user.Cart {
+func (u *User) RemoveFromCart(medName string, qty int) string {
+	for i, item := range u.Cart {
 		if strings.EqualFold(item.Med, medName) {
-			user.Cart = append(user.Cart[:i], user.Cart[i+1])
-			return fmt.Sprintf("%s has been removed from your cart.", item.Med)
+			if qty <= 0 {
+				return "Please specify a valid quantity to remove."
+			}
+
+			if item.Quantity > qty {
+				u.Cart[i].Quantity -= qty
+				return fmt.Sprintf("%d unit(s) of %s removed from your cart.", qty, medName)
+			} else if item.Quantity == qty {
+				u.Cart = append(u.Cart[:i], u.Cart[i+1:]...)
+				return fmt.Sprintf("All %s removed from your cart.", medName)
+			} else {
+				return fmt.Sprintf("You only have %d unit(s) of %s in your cart.", item.Quantity, medName)
+			}
 		}
 	}
-	return fmt.Sprintf("%s was not found in your cart.", medName)
+	return fmt.Sprintf("%s not found in your cart.", medName)
 }
 
 // CORE DOMAIN STRUCTS
@@ -154,11 +165,16 @@ func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
 		content = cb.Base.CheckPharmacy(query.Content, user)
 	case strings.HasPrefix(lowerInput, "remove"):
 		parts := strings.Fields(query.Content)
-		if len(parts) < 2 {
-			content = "Please specify the medication you want to remove (e.g., 'remove Ibuprofen'.)"
+		if len(parts) >= 3 {
+			qty, err := strconv.Atoi(parts[1])
+			if err == nil {
+				medName := strings.Join(parts[2:], " ")
+				content = user.RemoveFromCart(medName, qty)
+			} else {
+				content = "Please specify a valid number for quantity to remove."
+			}
 		} else {
-			medName := strings.Join(parts[1:], " ")
-			content = user.RemoveFromCart(medName)
+			content = "Please use the format: remove <quantity> <medicine name>."
 		}
 	case strings.Contains(lowerInput, "view cart"):
 		content = user.ViewCart()
