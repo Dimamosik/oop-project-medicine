@@ -14,10 +14,11 @@ User represents a patient using the chatbot. It contains basic personal data,
 a cart for pharmacy purchases, and interaction history.
 */
 type User struct {
-	ID      int
-	Name    string
-	Cart    []Pharmacy // Composition: Cart is composed of Pharmacy items
-	History []string   // Stores all user interactions
+	ID           int
+	Name         string
+	Cart         []Pharmacy // Composition: Cart is composed of Pharmacy items
+	History      []string   // Stores all user interactions
+	SelectDoctor *Doctor
 }
 
 /*
@@ -138,7 +139,9 @@ func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
 			"- Type 'list' to see a list of doctors or you can type recommend.\n" +
 			"- Ask about symptoms like 'headache' or 'fever' to get advice on how to deal with them.\n" +
 			"- You can buy medicines using 'buy <medication>' or remove with 'remove <medication>'.\n" +
-			"- Type 'view cart' to see items in your cart or 'checkout' to complete your purchase."
+			"- Type 'view cart' to see items in your cart or 'checkout' to complete your purchase.\n" +
+			"- Type 'book' to see available appointment slots.\n" +
+			"- Type 'confirm <slot number>' to confirm an appointment from the available list."
 	case strings.Contains(lowerInput, "headache"):
 		content = cb.Base.GetInfo("headache")
 	case strings.Contains(lowerInput, "fever"):
@@ -160,7 +163,7 @@ func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
 	case strings.Contains(lowerInput, "list"):
 		content = cb.Base.ListDoctors()
 	case strings.Contains(lowerInput, "select"):
-		content = cb.Base.SelectDoctor(query.Content)
+		content = cb.Base.SelectDoctor(query.Content, user)
 	case strings.Contains(lowerInput, "pharmacy") || strings.HasPrefix(lowerInput, "buy"):
 		content = cb.Base.CheckPharmacy(query.Content, user)
 	case strings.HasPrefix(lowerInput, "remove"):
@@ -180,6 +183,10 @@ func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
 		content = user.ViewCart()
 	case strings.Contains(lowerInput, "checkout"):
 		content = user.Checkout()
+	case strings.Contains(lowerInput, "book"):
+		content = cb.Base.BookAppointment(user)
+	case strings.Contains(lowerInput, "confirm"):
+		content = cb.ConfirmAppointment(query.Content, user)
 	default:
 		content = "I don't understand that. Type 'help' for instructions on how to interact with me."
 	}
@@ -258,7 +265,7 @@ func (md *MedDataBase) ListDoctors() string {
 	return response.String()
 }
 
-func (md *MedDataBase) SelectDoctor(input string) string {
+func (md *MedDataBase) SelectDoctor(input string, user *User) string {
 	doctors := []Doctor{
 		{"Dr. Smith", "General", "4.7", "New York"},
 		{"Dr. Life", "Cardiology", "4.5", "San Francisco"},
@@ -277,11 +284,49 @@ func (md *MedDataBase) SelectDoctor(input string) string {
 		return "Invalid doctor number. Please select a valid number from the list."
 	}
 
-	appointmentDate := time.Now().AddDate(0, 0, 7)
-	selectedDoctor := doctors[doctorNum-1]
+	selected := doctors[doctorNum-1]
+	user.SelectDoctor = &selected
 
-	return fmt.Sprintf("You selected: %s - %s (Location: %s, Rating: %s)\nYour appointment is scheduled for: %s.",
-		selectedDoctor.Name, selectedDoctor.Field, selectedDoctor.City, selectedDoctor.Rating, appointmentDate.Format("Monday, January 2, 2006"))
+	return fmt.Sprintf("You selected: %s - %s (Location: %s, Rating: %s)\nYou can now type 'book' to see available appointmet slots.",
+		selected.Name, selected.Field, selected.City, selected.Rating)
+}
+
+func (md *MedDataBase) BookAppointment(user *User) string {
+	if user.SelectDoctor == nil {
+		return "Please select a doctor first using 'select <name>'"
+	}
+	timeSlots := []string{"10:00 AM", "11:30 AM", "02:00 PM", "04:00 PM"}
+	futureDate := time.Now().AddDate(0, 0, 7)
+	dateStr := futureDate.Format("Monday, January 2, 2006")
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Appointment Booking with %s:\n", user.SelectDoctor.Name))
+	sb.WriteString("\nAvailable date: " + dateStr + "\nAvailable time slots:\n")
+	for i, slot := range timeSlots {
+		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, slot))
+	}
+	sb.WriteString("\nPlease type 'confirm <slot number>' to confirm your appointment.")
+
+	return sb.String()
+}
+
+func (cb *Chatbot) ConfirmAppointment(input string, user *User) string {
+	if user.SelectDoctor == nil {
+		return "You need to select a doctor first using 'select <number>'."
+	}
+	parts := strings.Fields(input)
+	if len(parts) < 2 {
+		return "Please specify the slot number to confirm (e.g. 'confirm 2')."
+
+	}
+	slotNum, err := strconv.Atoi(parts[1])
+	if err != nil || slotNum < 1 || slotNum > 4 {
+		return "Invalid slot number. Please choose a valid slot."
+
+	}
+	futureDate := time.Now().AddDate(0, 0, 7)
+	slots := []string{"10:00 AM", "11:30 AM", "02:00 PM", "04:00 PM"}
+	return fmt.Sprintf("Your appointment with %s has been confirmed for %s at %s.", user.SelectDoctor.Name, futureDate.Format("Monday, January 2, 2006"), slots[slotNum-1])
 }
 
 // PHARMACY STRUCTS AND LOGIC

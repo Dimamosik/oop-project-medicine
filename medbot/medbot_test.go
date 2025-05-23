@@ -90,9 +90,38 @@ func TestCheckPharmacyBuy(t *testing.T) {
 // TestSelectDoctor tests doctor selection logic
 func TestSelectDoctor(t *testing.T) {
 	db := MedDataBase{}
-	result := db.SelectDoctor("select 2")
-
+	user := &User{ID: 1, Name: "Tester"}
+	result := db.SelectDoctor("select 2", user)
 	if !strings.Contains(result, "Dr. Life") {
 		t.Errorf("Expected to select Dr. Life, got: %s", result)
+	}
+	if !strings.Contains(result, "Dr. Life") {
+		t.Errorf("Expected to select Dr. Life, got: %s", result)
+	}
+}
+
+// TestBookAppointment checks the booking output
+func TestBookAppointment(t *testing.T) {
+	db := &MedDataBase{}
+	user := &User{ID: 1, Name: "Tester"}
+	out := db.BookAppointment(user)
+	if !strings.Contains(out, "Available date:") || !strings.Contains(out, "confirm <slot number>") {
+		t.Errorf("BookAppointment output missing expected content: %s", out)
+	}
+}
+
+// TestConfirmAppointment checks various confirmations
+func TestConfirmAppointment(t *testing.T) {
+	cb := &Chatbot{}
+	user := &User{ID: 1, Name: "Tester"}
+	cb.Base.BookAppointment(user)
+	if !strings.Contains(cb.ConfirmAppointment("confirm 2", user), "confirmed") {
+		t.Errorf("Expected confirmation for valid slot")
+	}
+	if !strings.Contains(cb.ConfirmAppointment("confirm 10", user), "Invalid slot") {
+		t.Errorf("Expected error for invalid slot")
+	}
+	if !strings.Contains(cb.ConfirmAppointment("confirm", user), "specify the slot number") {
+		t.Errorf("Expected prompt for missing slot number")
 	}
 }
