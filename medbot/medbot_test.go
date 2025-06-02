@@ -125,3 +125,40 @@ func TestConfirmAppointment(t *testing.T) {
 		t.Errorf("Expected prompt for missing slot number")
 	}
 }
+func TestRateDoctor(t *testing.T) {
+	db := &MedDataBase{}
+	user := &User{ID: 1, Name: "Tester"}
+
+	response := db.RateDoctor(user, "rate 5")
+	expected := "Please select doctor before rate(e.g., 'select 2')."
+	if response != expected {
+		t.Errorf("Expected: %s, got: %s", expected, response)
+	}
+
+	user.SelectDoctor = &Doctor{Name: "Dr. Test", RatingList: []int{}}
+
+	response = db.RateDoctor(user, "rate 4")
+	if !strings.Contains(response, "You have rated 4 for Dr. Test") {
+		t.Errorf("Unexpected response: %s", response)
+	}
+
+	response = db.RateDoctor(user, "rate")
+	if !strings.Contains(response, "Please enter a rating") {
+		t.Errorf("Unexpected response for missing rating: %s", response)
+	}
+
+	response = db.RateDoctor(user, "rate great")
+	if !strings.Contains(response, "Invalid rating") {
+		t.Errorf("Unexpected response for non-numeric: %s", response)
+	}
+
+	response = db.RateDoctor(user, "rate 6")
+	if !strings.Contains(response, "Invalid rating") {
+		t.Errorf("Unexpected response for out-of-range: %s", response)
+	}
+
+	db.RateDoctor(user, "rate 2")
+	if user.SelectDoctor.Rating != "3.0" {
+		t.Errorf("Expected average 3.0, got %s", user.SelectDoctor.Rating)
+	}
+}

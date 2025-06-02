@@ -187,6 +187,8 @@ func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
 		content = cb.Base.BookAppointment(user)
 	case strings.Contains(lowerInput, "confirm"):
 		content = cb.ConfirmAppointment(query.Content, user)
+	case strings.HasPrefix(lowerInput, "rate"):
+		content = cb.Base.RateDoctor(user, query.Content)
 	default:
 		content = "I don't understand that. Type 'help' for instructions on how to interact with me."
 	}
@@ -203,10 +205,11 @@ type MedDataBase struct{} // Acts as a service layer
 
 // Doctor struct represents a physician. Part of the database, not behavior-heavy.
 type Doctor struct {
-	Name   string
-	Field  string
-	Rating string
-	City   string
+	Name       string
+	Field      string
+	Rating     string
+	City       string
+	RatingList []int
 }
 
 // GetInfo returns health advice based on a given symptom keyword.
@@ -230,11 +233,11 @@ func (md *MedDataBase) GetInfo(topic string) string {
 // SuggestDoctor recommends a doctor from a hardcoded list based on specialization.
 func (md *MedDataBase) SuggestDoctor(field string) string {
 	doctors := []Doctor{
-		{"Dr. Smith", "General", "4.7", "New York"},
-		{"Dr. Life", "Cardiology", "4.5", "San Francisco"},
-		{"Dr. Bold", "Pediatrics", "4.9", "Chicago"},
-		{"Dr. Rose", "Dermatology", "4.6", "Los Angeles"},
-		{"Dr. Green", "Neurology", "4.8", "Boston"},
+		{"Dr. Smith", "General", "4.7", "New York", []int{}},
+		{"Dr. Life", "Cardiology", "4.5", "San Francisco", []int{}},
+		{"Dr. Bold", "Pediatrics", "4.9", "Chicago", []int{}},
+		{"Dr. Rose", "Dermatology", "4.6", "Los Angeles", []int{}},
+		{"Dr. Green", "Neurology", "4.8", "Boston", []int{}},
 	}
 	for _, d := range doctors {
 		if strings.EqualFold(d.Field, field) {
@@ -247,11 +250,11 @@ func (md *MedDataBase) SuggestDoctor(field string) string {
 // ListDoctors returns a string listing all available doctors.
 func (md *MedDataBase) ListDoctors() string {
 	doctors := []Doctor{
-		{"Dr. Smith", "General", "4.7", "New York"},
-		{"Dr. Life", "Cardiology", "4.5", "San Francisco"},
-		{"Dr. Bold", "Pediatrics", "4.9", "Chicago"},
-		{"Dr. Rose", "Dermatology", "4.6", "Los Angeles"},
-		{"Dr. Green", "Neurology", "4.8", "Boston"},
+		{"Dr. Smith", "General", "4.7", "New York", []int{}},
+		{"Dr. Life", "Cardiology", "4.5", "San Francisco", []int{}},
+		{"Dr. Bold", "Pediatrics", "4.9", "Chicago", []int{}},
+		{"Dr. Rose", "Dermatology", "4.6", "Los Angeles", []int{}},
+		{"Dr. Green", "Neurology", "4.8", "Boston", []int{}},
 	}
 
 	var response strings.Builder
@@ -265,13 +268,39 @@ func (md *MedDataBase) ListDoctors() string {
 	return response.String()
 }
 
+func (md *MedDataBase) RateDoctor(user *User, input string) string {
+	if user.SelectDoctor == nil {
+		return "Please select doctor before rate(e.g., 'select 2')."
+	}
+	parts := strings.Fields(input)
+	if len(parts) < 2 {
+		return "Please enter a rating from 1 to 5 (e.g. 'rate 5')."
+	}
+	rate, err := strconv.Atoi(parts[1])
+	if err != nil || rate < 1 || rate > 5 {
+		return "Invalid rating. Please enter a number from 1 to 5."
+	}
+
+	user.SelectDoctor.RatingList = append(user.SelectDoctor.RatingList, rate)
+
+	sum := 0
+	for _, r := range user.SelectDoctor.RatingList {
+		sum += r
+
+	}
+	avg := float64(sum) / float64(len(user.SelectDoctor.RatingList))
+	user.SelectDoctor.Rating = fmt.Sprintf("%.1f", avg)
+
+	return fmt.Sprintf("Thank you! You have rated %d for %s. Current average rating: %s", rate, user.SelectDoctor.Name, user.SelectDoctor.Rating)
+}
+
 func (md *MedDataBase) SelectDoctor(input string, user *User) string {
 	doctors := []Doctor{
-		{"Dr. Smith", "General", "4.7", "New York"},
-		{"Dr. Life", "Cardiology", "4.5", "San Francisco"},
-		{"Dr. Bold", "Pediatrics", "4.9", "Chicago"},
-		{"Dr. Rose", "Dermatology", "4.6", "Los Angeles"},
-		{"Dr. Green", "Neurology", "4.8", "Boston"},
+		{"Dr. Smith", "General", "4.7", "New York", []int{}},
+		{"Dr. Life", "Cardiology", "4.5", "San Francisco", []int{}},
+		{"Dr. Bold", "Pediatrics", "4.9", "Chicago", []int{}},
+		{"Dr. Rose", "Dermatology", "4.6", "Los Angeles", []int{}},
+		{"Dr. Green", "Neurology", "4.8", "Boston", []int{}},
 	}
 
 	parts := strings.Fields(input)
