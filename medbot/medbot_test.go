@@ -3,162 +3,110 @@ package medbot
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
-// TestAddToCartAndViewCart tests adding items to the cart and viewing it
-func TestAddToCartAndViewCart(t *testing.T) {
-	user := &User{ID: 1, Name: "Test User"}
+func setupBot() (*Chatbot, *User) {
+	db := MedDataBase{
+		Doctors: []Doctor{
+			{ID: "D1", Name: "Dr. Smith", Special: "General", Location: "New York"},
+			{ID: "D2", Name: "Dr. Life", Special: "Cardiology", Location: "San Francisco"},
+			{ID: "D3", Name: "Dr. Bold", Special: "Pediatrics", Location: "Chicago"},
+			{ID: "D4", Name: "Dr. Rose", Special: "Dermatology", Location: "Los Angeles"},
+			{ID: "D5", Name: "Dr. Green", Special: "Neurology", Location: "Boston"},
+		},
+	}
+	bot := &Chatbot{Base: db}
+	user := &User{Name: "TestUser"}
+	return bot, user
+}
 
-	med := Pharmacy{Med: "Ibuprofen", Price: 10, Available: 5}
-	user.AddToCart(med, 1)
-
-	cart := user.ViewCart()
-	if !strings.Contains(cart, "Ibuprofen") {
-		t.Errorf("Expected 'Ibuprofen' in cart, got: %s", cart)
+func TestRateDoctorHandler(t *testing.T) {
+	bot, user := setupBot()
+	resp := bot.GenerateResponse(Query{Content: "rate D1 5"}, user)
+	if !strings.Contains(resp.Content, "Thank you for rating Dr. Smith") {
+		t.Errorf("unexpected response: %s", resp.Content)
 	}
 }
 
-// TestRemoveFromCart test the removal functionality
-func TestRemoveSpecificQuantityFromCart(t *testing.T) {
-	user := &User{ID: 1, Name: "Test User"}
-	user.AddToCart(Pharmacy{Med: "Ibuprofen", Price: 10}, 3)
-
-	msg := user.RemoveFromCart("Ibuprofen", 2)
-	if !strings.Contains(msg, "2 unit(s) of Ibuprofen removed") {
-		t.Errorf("Unexpected message: %s", msg)
-	}
-	if user.Cart[0].Quantity != 1 {
-		t.Errorf("Expected quantity to be 1, got: %d", user.Cart[0].Quantity)
+func TestSelectDoctorHandler(t *testing.T) {
+	bot, user := setupBot()
+	resp := bot.GenerateResponse(Query{Content: "select doctor D2"}, user)
+	if !strings.Contains(resp.Content, "Dr. Life") {
+		t.Errorf("unexpected response: %s", resp.Content)
 	}
 }
 
-// TestCheckout tests the checkout functionality
-func TestCheckout(t *testing.T) {
-	user := &User{ID: 1, Name: "Test User"}
-	user.AddToCart(Pharmacy{Med: "Paracetamol", Price: 5}, 3)
-
-	checkout := user.Checkout()
-	if !strings.Contains(checkout, "Your total is $5") {
-		t.Errorf("Unexpected checkout message: %s", checkout)
-	}
-	if len(user.Cart) != 0 {
-		t.Errorf("Cart should be empty after checkout")
+func TestBookAppointmentHandler(t *testing.T) {
+	bot, user := setupBot()
+	resp := bot.GenerateResponse(Query{Content: "book D3 2PM"}, user)
+	if !strings.Contains(resp.Content, "Appointment booked") {
+		t.Errorf("unexpected response: %s", resp.Content)
 	}
 }
 
-// TestGenerateResponseHelp tests the chatbot 'help' response
-func TestGenerateResponseHelp(t *testing.T) {
-	cb := &Chatbot{
-		Name: "TestBot",
-		Base: MedDataBase{},
-	}
-	user := &User{ID: 1, Name: "Tester"}
-	query := Query{UserID: user.ID, Timestamp: time.Now(), Content: "help"}
-
-	response := cb.GenerateResponse(query, user)
-
-	if !strings.Contains(response.Content, "ask me about your symptoms") {
-		t.Errorf("Expected help instructions in response, got: %s", response.Content)
+func TestAddToCartHandler(t *testing.T) {
+	bot, user := setupBot()
+	resp := bot.GenerateResponse(Query{Content: "add aspirin 2"}, user)
+	if !strings.Contains(resp.Content, "Added aspirin x2") {
+		t.Errorf("unexpected response: %s", resp.Content)
 	}
 }
 
-// TestGetInfo tests symptom advice retrieval
-func TestGetInfo(t *testing.T) {
-	db := MedDataBase{}
-	info := db.GetInfo("headache")
-	if !strings.Contains(info, "compress") {
-		t.Errorf("Unexpected headache info: %s", info)
+func TestRemoveFromCartHandler(t *testing.T) {
+
+	bot, user := setupBot()
+
+	_ = bot.GenerateResponse(Query{Content: "buy aspirin 2"}, user)
+
+	resp1 := bot.GenerateResponse(Query{Content: "remove 1 aspirin"}, user)
+	if !strings.Contains(resp1.Content, "Removed 1 aspirin. Remaining: 1.") {
+		t.Errorf("unexpected response after first removal: %s", resp1.Content)
+	}
+
+	resp2 := bot.GenerateResponse(Query{Content: "remove 1 aspirin"}, user)
+	if !strings.Contains(resp2.Content, "Removed all of aspirin from your cart.") {
+		t.Errorf("unexpected response after final removal: %s", resp2.Content)
 	}
 }
 
-// TestCheckPharmacyBuy tests buying medication from the pharmacy
-func TestCheckPharmacyBuy(t *testing.T) {
-	db := MedDataBase{}
-	user := &User{ID: 1, Name: "Tester"}
-
-	result := db.CheckPharmacy("buy Ibuprofen", user)
-
-	if !strings.Contains(result, "added to your cart") {
-		t.Errorf("Expected item to be added to cart, got: %s", result)
-	}
-	if len(user.Cart) == 0 || user.Cart[0].Med != "Ibuprofen" {
-		t.Errorf("Item not correctly added to cart")
+func TestViewCartHandler(t *testing.T) {
+	bot, user := setupBot()
+	_ = bot.GenerateResponse(Query{Content: "add ibuprofen 3"}, user)
+	resp := bot.GenerateResponse(Query{Content: "view cart"}, user)
+	if !strings.Contains(resp.Content, "ibuprofen x3") {
+		t.Errorf("unexpected response: %s", resp.Content)
 	}
 }
 
-// TestSelectDoctor tests doctor selection logic
-func TestSelectDoctor(t *testing.T) {
-	db := MedDataBase{}
-	user := &User{ID: 1, Name: "Tester"}
-	result := db.SelectDoctor("select 2", user)
-	if !strings.Contains(result, "Dr. Life") {
-		t.Errorf("Expected to select Dr. Life, got: %s", result)
-	}
-	if !strings.Contains(result, "Dr. Life") {
-		t.Errorf("Expected to select Dr. Life, got: %s", result)
+func TestViewAppointmentsHandler(t *testing.T) {
+	bot, user := setupBot()
+	_ = bot.GenerateResponse(Query{Content: "book D1 10AM"}, user)
+	resp := bot.GenerateResponse(Query{Content: "view appointments"}, user)
+	if !strings.Contains(resp.Content, "Appointment with Dr. Smith") {
+		t.Errorf("unexpected response: %s", resp.Content)
 	}
 }
 
-// TestBookAppointment checks the booking output
-func TestBookAppointment(t *testing.T) {
-	db := &MedDataBase{}
-	user := &User{ID: 1, Name: "Tester"}
-	out := db.BookAppointment(user)
-	if !strings.Contains(out, "Available date:") || !strings.Contains(out, "confirm <slot number>") {
-		t.Errorf("BookAppointment output missing expected content: %s", out)
+func TestGetInfoHandler(t *testing.T) {
+	bot, user := setupBot()
+	resp := bot.GenerateResponse(Query{Content: "info headache"}, user)
+	if !strings.Contains(resp.Content, "Use a hot or cold compress") {
+		t.Errorf("unexpected response: %s", resp.Content)
 	}
 }
 
-// TestConfirmAppointment checks various confirmations
-func TestConfirmAppointment(t *testing.T) {
-	cb := &Chatbot{}
-	user := &User{ID: 1, Name: "Tester"}
-	cb.Base.BookAppointment(user)
-	if !strings.Contains(cb.ConfirmAppointment("confirm 2", user), "confirmed") {
-		t.Errorf("Expected confirmation for valid slot")
-	}
-	if !strings.Contains(cb.ConfirmAppointment("confirm 10", user), "Invalid slot") {
-		t.Errorf("Expected error for invalid slot")
-	}
-	if !strings.Contains(cb.ConfirmAppointment("confirm", user), "specify the slot number") {
-		t.Errorf("Expected prompt for missing slot number")
+func TestListDoctorsHandler(t *testing.T) {
+	bot, user := setupBot()
+	resp := bot.GenerateResponse(Query{Content: "list doctors"}, user)
+	if !strings.Contains(resp.Content, "Dr. Smith") || !strings.Contains(resp.Content, "General") {
+		t.Errorf("unexpected response: %s", resp.Content)
 	}
 }
-func TestRateDoctor(t *testing.T) {
-	db := &MedDataBase{}
-	user := &User{ID: 1, Name: "Tester"}
 
-	response := db.RateDoctor(user, "rate 5")
-	expected := "Please select doctor before rate(e.g., 'select 2')."
-	if response != expected {
-		t.Errorf("Expected: %s, got: %s", expected, response)
-	}
-
-	user.SelectDoctor = &Doctor{Name: "Dr. Test", RatingList: []int{}}
-
-	response = db.RateDoctor(user, "rate 4")
-	if !strings.Contains(response, "You have rated 4 for Dr. Test") {
-		t.Errorf("Unexpected response: %s", response)
-	}
-
-	response = db.RateDoctor(user, "rate")
-	if !strings.Contains(response, "Please enter a rating") {
-		t.Errorf("Unexpected response for missing rating: %s", response)
-	}
-
-	response = db.RateDoctor(user, "rate great")
-	if !strings.Contains(response, "Invalid rating") {
-		t.Errorf("Unexpected response for non-numeric: %s", response)
-	}
-
-	response = db.RateDoctor(user, "rate 6")
-	if !strings.Contains(response, "Invalid rating") {
-		t.Errorf("Unexpected response for out-of-range: %s", response)
-	}
-
-	db.RateDoctor(user, "rate 2")
-	if user.SelectDoctor.Rating != "3.0" {
-		t.Errorf("Expected average 3.0, got %s", user.SelectDoctor.Rating)
+func TestUnknownCommandHandler(t *testing.T) {
+	bot, user := setupBot()
+	resp := bot.GenerateResponse(Query{Content: "xyz unknown"}, user)
+	if !strings.Contains(resp.Content, "I didn't understand that") {
+		t.Errorf("unexpected response: %s", resp.Content)
 	}
 }

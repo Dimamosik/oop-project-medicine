@@ -1,61 +1,58 @@
 package main
 
 import (
-	"bufio" // For buffered input from the user
+	"bufio"
 	"fmt"
-	"os"      // For accessing operating system features like stdin
-	"strings" // For string manipulation
-	"time"    // For working with dates and times
+	"os"
+	"strings"
 
-	"medbot_project/medbot" // Importing the custom medbot package that defines the chatbot logic
+	"medbot_project/medbot"
 )
 
 func main() {
+	user := &medbot.User{Name: "Alice"}
 
-	user := medbot.User{
-		ID:   1,
-		Name: "Dmytro",
+	db := medbot.MedDataBase{
+		Doctors: []medbot.Doctor{
+			{ID: "1", Name: "Dr. Smith", Special: "General", Location: "New York"},
+			{ID: "2", Name: "Dr. Life", Special: "Cardiology", Location: "San Francisco"},
+			{ID: "3", Name: "Dr. Bold", Special: "Pediatrics", Location: "Chicago"},
+			{ID: "4", Name: "Dr. Rose", Special: "Dermatology", Location: "Los Angeles"},
+			{ID: "5", Name: "Dr. Green", Special: "Neurology", Location: "Boston"},
+		},
+		Medicines: []string{
+			"Paracetamol",
+			"Amoxicillin",
+			"Ibuprofen",
+			"Loratadine",
+			"Omeprazole",
+		},
 	}
 
-	// It has a name and a base database
-	bot := medbot.Chatbot{
-		Name: "MedBot",
-		Base: medbot.MedDataBase{}, // Provide an instance of the medical database
-	}
+	bot := medbot.Chatbot{Base: db}
 
-	fmt.Println("\nWelcome to MedBot - your vitual medical assistant.")
-	fmt.Println(" Type 'help' to see what i can do or 'exit' to leave.")
+	fmt.Println("You can ask me about your symptoms, or you can ask for a list of doctors. For example:\n" +
+		"- Type 'list' to see a list of doctors or you can type recommend.\n" +
+		"- Ask about symptoms like 'headache' or 'fever' to get advice on how to deal with them.\n" +
+		"- You can add medicines using 'buy <medication> [quantity]' or remove with 'remove [quantity] <medication>'.\n" +
+		"- Type 'view cart' to see items in your cart.\n" +
+		"- Type 'book' to book an appointment 'book 3 14:00'.")
 	fmt.Println()
-	// Create a buffered reader to read user input from the terminal
-	reader := bufio.NewReader(os.Stdin)
 
+	scanner := bufio.NewScanner(os.Stdin)
 	for {
-
 		fmt.Print("You: ")
-
-		// Read a full line of text until the user presses "Enter"
-		input, err := reader.ReadString('\n') // Read input including newline
-		if err != nil {
-			// Handle any error that occurred while reading input
-			fmt.Println("Error reading input:", err)
-			continue
+		if !scanner.Scan() {
+			break
 		}
-
-		// Remove any leading whitespace
-		input = strings.TrimSpace(input)
-
+		input := scanner.Text()
 		if strings.ToLower(input) == "exit" {
 			fmt.Println("Goodbye!")
 			break
 		}
 
-		// Pass the user's input to the chatbot and get a parsed query
-		query := bot.ReceiveInput(&user, input)
-
-		// Ask the bot to generate a response based on the query and user
-		response := bot.GenerateResponse(query, &user)
-
-		// Print the bot's response with a timestamp
-		fmt.Printf("\nMedBot [%s]: %s\n", response.Time.Format(time.Kitchen), response.Content)
+		query := medbot.Query{Content: input}
+		response := bot.GenerateResponse(query, user)
+		fmt.Printf("[%s] Bot: %s\n", response.Time.Format("15:04:05"), response.Content)
 	}
 }

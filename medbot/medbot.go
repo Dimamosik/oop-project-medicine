@@ -7,409 +7,338 @@ import (
 	"time"
 )
 
-// USER STRUCT AND METHODS
-
-/*
-User represents a patient using the chatbot. It contains basic personal data,
-a cart for pharmacy purchases, and interaction history.
-*/
-type User struct {
-	ID           int
-	Name         string
-	Cart         []Pharmacy // Composition: Cart is composed of Pharmacy items
-	History      []string   // Stores all user interactions
-	SelectDoctor *Doctor
-}
-
-/*
-AddToCart adds a medication to the user's cart.
-Demonstrates encapsulation: Cart is modified through a method.
-*/
-func (user *User) AddToCart(med Pharmacy, quantity int) {
-	for i, item := range user.Cart {
-		if strings.EqualFold(item.Med, med.Med) {
-			user.Cart[i].Quantity += quantity
-			return
-		}
-	}
-	med.Quantity = quantity
-	user.Cart = append(user.Cart, med)
-}
-
-// ViewCart returns a string listing all the items in the cart.
-func (user *User) ViewCart() string {
-	if len(user.Cart) == 0 {
-		return "Your cart is empty."
-	}
-
-	var response strings.Builder
-	var total int
-	response.WriteString("Your cart contains the following items:\n")
-	for _, item := range user.Cart {
-		subtotal := item.Price * item.Quantity
-		total += subtotal
-		response.WriteString(fmt.Sprintf("- %s x%d: $%d\n", item.Med, item.Quantity, subtotal))
-	}
-	response.WriteString(fmt.Sprintf("Total: $%d", total))
-	return response.String()
-}
-
-// Checkout finalizes the purchase, returns the total cost, and clears the cart.
-func (user *User) Checkout() string {
-	var total int
-	for _, item := range user.Cart {
-		total += item.Price * item.Quantity
-	}
-	user.Cart = []Pharmacy{} // Clear the cart
-	return fmt.Sprintf("Your total is $%d. Thank you for your purchase!", total)
-}
-
-func (u *User) RemoveFromCart(medName string, qty int) string {
-	for i, item := range u.Cart {
-		if strings.EqualFold(item.Med, medName) {
-			if qty <= 0 {
-				return "Please specify a valid quantity to remove."
-			}
-
-			if item.Quantity > qty {
-				u.Cart[i].Quantity -= qty
-				return fmt.Sprintf("%d unit(s) of %s removed from your cart.", qty, medName)
-			} else if item.Quantity == qty {
-				u.Cart = append(u.Cart[:i], u.Cart[i+1:]...)
-				return fmt.Sprintf("All %s removed from your cart.", medName)
-			} else {
-				return fmt.Sprintf("You only have %d unit(s) of %s in your cart.", item.Quantity, medName)
-			}
-		}
-	}
-	return fmt.Sprintf("%s not found in your cart.", medName)
-}
-
-// CORE DOMAIN STRUCTS
-
-/*
-Query represents a user message, including metadata like timestamp and user ID.
-It forms part of the conversation context.
-*/
 type Query struct {
-	UserID    int
-	Timestamp time.Time
-	Content   string
+	Content string
 }
 
-// Response represents the chatbot's reply, with a timestamp for logging.
 type Response struct {
 	Content string
 	Time    time.Time
 }
 
-/*
-Chatbot encapsulates the bot. Contains bot name, access to a medical database,
-and stores the ongoing conversation history.
-*/
-type Chatbot struct {
+type User struct {
 	Name string
-	Base MedDataBase // Composition: Chatbot uses a MedDataBase
-	Conv []Query     // Stores the full query log
 }
 
-// CHATBOT BEHAVIOR
-
-// Demonstrates behavioral encapsulation: user interaction is handled internally.
-func (cb *Chatbot) ReceiveInput(user *User, input string) Query {
-	query := Query{
-		UserID:    user.ID,
-		Timestamp: time.Now(),
-		Content:   input,
-	}
-	cb.Conv = append(cb.Conv, query)
-	user.History = append(user.History, input)
-	return query
-}
-
-// Demonstrates polymorphism and control flow based on user intent.
-func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
-	var content string
-	lowerInput := strings.ToLower(query.Content)
-
-	// Intent recognition via pattern matching
-	switch {
-	case lowerInput == "help":
-		content = "You can ask me about your symptoms, or you can ask for a list of doctors. For example:\n" +
-			"- Type 'list' to see a list of doctors or you can type recommend.\n" +
-			"- Ask about symptoms like 'headache' or 'fever' to get advice on how to deal with them.\n" +
-			"- You can buy medicines using 'buy <medication>' or remove with 'remove <medication>'.\n" +
-			"- Type 'view cart' to see items in your cart or 'checkout' to complete your purchase.\n" +
-			"- Type 'book' to see available appointment slots.\n" +
-			"- Type 'confirm <slot number>' to confirm an appointment from the available list."
-	case strings.Contains(lowerInput, "headache"):
-		content = cb.Base.GetInfo("headache")
-	case strings.Contains(lowerInput, "fever"):
-		content = cb.Base.GetInfo("fever")
-	case strings.Contains(lowerInput, "toothache"):
-		content = cb.Base.GetInfo("toothache")
-	case strings.Contains(lowerInput, "diarrhea"):
-		content = cb.Base.GetInfo("diarrhea")
-	case strings.Contains(lowerInput, "chill"):
-		content = cb.Base.GetInfo("chill")
-	case strings.Contains(lowerInput, "runny nose"):
-		content = cb.Base.GetInfo("runny nose")
-	case strings.Contains(lowerInput, "vomiting"):
-		content = cb.Base.GetInfo("vomiting")
-	case strings.Contains(lowerInput, "cut"):
-		content = cb.Base.GetInfo("cut")
-	case strings.Contains(lowerInput, "recommend"):
-		content = cb.Base.SuggestDoctor("general")
-	case strings.Contains(lowerInput, "list"):
-		content = cb.Base.ListDoctors()
-	case strings.Contains(lowerInput, "select"):
-		content = cb.Base.SelectDoctor(query.Content, user)
-	case strings.Contains(lowerInput, "pharmacy") || strings.HasPrefix(lowerInput, "buy"):
-		content = cb.Base.CheckPharmacy(query.Content, user)
-	case strings.HasPrefix(lowerInput, "remove"):
-		parts := strings.Fields(query.Content)
-		if len(parts) >= 3 {
-			qty, err := strconv.Atoi(parts[1])
-			if err == nil {
-				medName := strings.Join(parts[2:], " ")
-				content = user.RemoveFromCart(medName, qty)
-			} else {
-				content = "Please specify a valid number for quantity to remove."
-			}
-		} else {
-			content = "Please use the format: remove <quantity> <medicine name>."
-		}
-	case strings.Contains(lowerInput, "view cart"):
-		content = user.ViewCart()
-	case strings.Contains(lowerInput, "checkout"):
-		content = user.Checkout()
-	case strings.Contains(lowerInput, "book"):
-		content = cb.Base.BookAppointment(user)
-	case strings.Contains(lowerInput, "confirm"):
-		content = cb.ConfirmAppointment(query.Content, user)
-	case strings.HasPrefix(lowerInput, "rate"):
-		content = cb.Base.RateDoctor(user, query.Content)
-	default:
-		content = "I don't understand that. Type 'help' for instructions on how to interact with me."
-	}
-
-	return Response{
-		Content: content,
-		Time:    time.Now(),
-	}
-}
-
-// DATABASE: Encapsulation of Medical Knowledge and Services
-
-type MedDataBase struct{} // Acts as a service layer
-
-// Doctor struct represents a physician. Part of the database, not behavior-heavy.
 type Doctor struct {
-	Name       string
-	Field      string
-	Rating     string
-	City       string
-	RatingList []int
+	ID       string
+	Name     string
+	Special  string
+	Location string
+	Ratings  []int
 }
 
-// GetInfo returns health advice based on a given symptom keyword.
-func (md *MedDataBase) GetInfo(topic string) string {
-	data := map[string]string{
-		"headache":   "Use a hot or cold compress on your head or neck. Try gentle massage. Drink small amounts of caffeine. Take over-the-counter pain relievers like ibuprofen or aspirin.",
-		"fever":      "If you have a fever rest, stay hydrated, and take fever-reducing medicine like acetaminophen or ibuprofen.",
-		"toothache":  "Rinse your mouth with warm salt water. Use a cold compress on your cheek. Apply clove oil to the tooth. Take over-the-counter painkillers like ibuprofen.",
-		"diarrhea":   "Drink plenty of fluids and oral rehydration solution. Eat bland foods like bananas and rice. Avoid dairy, caffeine, and greasy food. Rest as much as possible.",
-		"chill":      "Wear warm clothing and use blankets. Drink hot tea or soup. Rest and check for fever. Use a warm compress if you feel tense or achy.",
-		"runny nose": "Drink lots of water. Use a saline spray or rinse. Try a warm compress on your face. Rest and avoid allergens or irritants.",
-		"vomiting":   "Sip water or electrolyte drinks slowly. Avoid solid food until vomiting stops. Eat plain food like toast or crackers after. Rest and avoid strong smells.",
-		"cut":        "Wash the cut with water and mild soap. Press with a clean cloth to stop bleeding. Apply antiseptic and cover with a bandage. Change the bandage daily.",
-	}
-	if info, ok := data[topic]; ok {
-		return info
-	}
-	return "Sorry, I have no information on that."
+type Appointment struct {
+	UserName   string
+	DoctorName string
+	TimeSlot   string
 }
 
-// SuggestDoctor recommends a doctor from a hardcoded list based on specialization.
-func (md *MedDataBase) SuggestDoctor(field string) string {
-	doctors := []Doctor{
-		{"Dr. Smith", "General", "4.7", "New York", []int{}},
-		{"Dr. Life", "Cardiology", "4.5", "San Francisco", []int{}},
-		{"Dr. Bold", "Pediatrics", "4.9", "Chicago", []int{}},
-		{"Dr. Rose", "Dermatology", "4.6", "Los Angeles", []int{}},
-		{"Dr. Green", "Neurology", "4.8", "Boston", []int{}},
-	}
-	for _, d := range doctors {
-		if strings.EqualFold(d.Field, field) {
-			return "Recommended doctor: " + d.Name + " (" + d.Field + ", Rating: " + d.Rating + ")"
+type Item struct {
+	Name     string
+	Quantity int
+}
+
+type MedDataBase struct {
+	Doctors      []Doctor
+	Appointments []Appointment
+	Cart         []Item
+	Medicines    []string
+}
+
+type CommandHandler interface {
+	CanHandle(input string) bool
+	Handle(query Query, user *User, db *MedDataBase) string
+}
+
+type SymptomInfoHandler struct{}
+
+func (s SymptomInfoHandler) CanHandle(input string) bool {
+	symptoms := getSymptomData()
+	lower := strings.ToLower(input)
+	for keyword := range symptoms {
+		if strings.Contains(lower, keyword) {
+			return true
 		}
 	}
-	return "Sorry, no doctor found for that speciality."
+	return false
 }
 
-// ListDoctors returns a string listing all available doctors.
-func (md *MedDataBase) ListDoctors() string {
-	doctors := []Doctor{
-		{"Dr. Smith", "General", "4.7", "New York", []int{}},
-		{"Dr. Life", "Cardiology", "4.5", "San Francisco", []int{}},
-		{"Dr. Bold", "Pediatrics", "4.9", "Chicago", []int{}},
-		{"Dr. Rose", "Dermatology", "4.6", "Los Angeles", []int{}},
-		{"Dr. Green", "Neurology", "4.8", "Boston", []int{}},
+func (s SymptomInfoHandler) Handle(query Query, user *User, db *MedDataBase) string {
+	symptoms := getSymptomData()
+	lower := strings.ToLower(query.Content)
+	for keyword, info := range symptoms {
+		if strings.Contains(lower, keyword) {
+			return fmt.Sprintf("Advice for %s: %s", keyword, info)
+		}
 	}
-
-	var response strings.Builder
-	response.WriteString("Here are the available doctors:\n")
-	for i, d := range doctors {
-		response.WriteString(
-			fmt.Sprintf("%d. %s - %s (Location: %s, Rating: %s)\n",
-				i+1, d.Name, d.Field, d.City, d.Rating),
-		)
-	}
-	return response.String()
+	return "I'm not sure how to help with that symptom."
 }
 
-func (md *MedDataBase) RateDoctor(user *User, input string) string {
-	if user.SelectDoctor == nil {
-		return "Please select doctor before rate(e.g., 'select 2')."
+func getSymptomData() map[string]string {
+	return map[string]string{
+		"headache":   "Use a cold compress, take ibuprofen, rest in a quiet dark room.",
+		"fever":      "Take acetaminophen, stay hydrated, and rest.",
+		"toothache":  "Rinse mouth with warm salt water, take ibuprofen, apply cold compress.",
+		"diarrhea":   "Drink oral rehydration fluids, eat bananas and rice.",
+		"chill":      "Wear warm clothes, drink hot drinks, rest.",
+		"runny nose": "Use a saline spray, drink water, rest.",
+		"vomiting":   "Sip fluids, rest, avoid food until it stops.",
+		"cut":        "Clean with water, apply antiseptic and bandage.",
 	}
-	parts := strings.Fields(input)
-	if len(parts) < 2 {
-		return "Please enter a rating from 1 to 5 (e.g. 'rate 5')."
-	}
-	rate, err := strconv.Atoi(parts[1])
-	if err != nil || rate < 1 || rate > 5 {
-		return "Invalid rating. Please enter a number from 1 to 5."
-	}
-
-	user.SelectDoctor.RatingList = append(user.SelectDoctor.RatingList, rate)
-
-	sum := 0
-	for _, r := range user.SelectDoctor.RatingList {
-		sum += r
-
-	}
-	avg := float64(sum) / float64(len(user.SelectDoctor.RatingList))
-	user.SelectDoctor.Rating = fmt.Sprintf("%.1f", avg)
-
-	return fmt.Sprintf("Thank you! You have rated %d for %s. Current average rating: %s", rate, user.SelectDoctor.Name, user.SelectDoctor.Rating)
 }
 
-func (md *MedDataBase) SelectDoctor(input string, user *User) string {
-	doctors := []Doctor{
-		{"Dr. Smith", "General", "4.7", "New York", []int{}},
-		{"Dr. Life", "Cardiology", "4.5", "San Francisco", []int{}},
-		{"Dr. Bold", "Pediatrics", "4.9", "Chicago", []int{}},
-		{"Dr. Rose", "Dermatology", "4.6", "Los Angeles", []int{}},
-		{"Dr. Green", "Neurology", "4.8", "Boston", []int{}},
-	}
+type PharmacyHandler struct{}
 
-	parts := strings.Fields(input)
-	if len(parts) < 2 {
-		return "Please provide the number of the doctor you wish to select (e.g., 'select 2')."
-	}
-
-	doctorNum, err := strconv.Atoi(parts[1])
-	if err != nil || doctorNum < 1 || doctorNum > len(doctors) {
-		return "Invalid doctor number. Please select a valid number from the list."
-	}
-
-	selected := doctors[doctorNum-1]
-	user.SelectDoctor = &selected
-
-	return fmt.Sprintf("You selected: %s - %s (Location: %s, Rating: %s)\nYou can now type 'book' to see available appointmet slots.",
-		selected.Name, selected.Field, selected.City, selected.Rating)
+func (p PharmacyHandler) CanHandle(input string) bool {
+	return strings.ToLower(input) == "pharmacy"
 }
 
-func (md *MedDataBase) BookAppointment(user *User) string {
-	if user.SelectDoctor == nil {
-		return "Please select a doctor first using 'select <name>'"
+func (p PharmacyHandler) Handle(query Query, user *User, db *MedDataBase) string {
+	if len(db.Medicines) == 0 {
+		return "No medicines available at the moment."
 	}
-	timeSlots := []string{"10:00 AM", "11:30 AM", "02:00 PM", "04:00 PM"}
-	futureDate := time.Now().AddDate(0, 0, 7)
-	dateStr := futureDate.Format("Monday, January 2, 2006")
+	return "Available medicines: " + strings.Join(db.Medicines, ", ")
+}
 
+type RateDoctorHandler struct{}
+
+func (r RateDoctorHandler) CanHandle(input string) bool {
+	return strings.HasPrefix(strings.ToLower(input), "rate")
+}
+
+func (r RateDoctorHandler) Handle(query Query, user *User, db *MedDataBase) string {
+	parts := strings.Fields(query.Content)
+	if len(parts) != 3 {
+		return "Invalid rating format. Use: rate <DoctorID> <Rating (1-5)>"
+	}
+
+	doctorID := parts[1]
+	rating, err := strconv.Atoi(parts[2])
+	if err != nil || rating < 1 || rating > 5 {
+		return "Please enter a valid rating from 1 to 5."
+	}
+
+	for i := range db.Doctors {
+		if db.Doctors[i].ID == doctorID {
+			db.Doctors[i].Ratings = append(db.Doctors[i].Ratings, rating)
+			return fmt.Sprintf("Thank you for rating Dr. %s with %d stars.", db.Doctors[i].Name, rating)
+		}
+	}
+
+	return "Doctor not found."
+}
+
+type ListDoctorsHandler struct{}
+
+func (l ListDoctorsHandler) CanHandle(input string) bool {
+	cmd := strings.TrimSpace(strings.ToLower(input))
+	return cmd == "list" || cmd == "list doctors"
+}
+
+func (l ListDoctorsHandler) Handle(query Query, user *User, db *MedDataBase) string {
+	if len(db.Doctors) == 0 {
+		return "No doctors available."
+	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Appointment Booking with %s:\n", user.SelectDoctor.Name))
-	sb.WriteString("\nAvailable date: " + dateStr + "\nAvailable time slots:\n")
-	for i, slot := range timeSlots {
-		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, slot))
+	sb.WriteString("Available doctors:\n")
+	for _, doc := range db.Doctors {
+		avgRating := "No ratings"
+		if len(doc.Ratings) > 0 {
+			sum := 0
+			for _, r := range doc.Ratings {
+				sum += r
+			}
+			avg := float64(sum) / float64(len(doc.Ratings))
+			avgRating = fmt.Sprintf("%.1f", avg)
+		}
+		sb.WriteString(fmt.Sprintf("- ID: %s, Name: %s, Specialty: %s, Location: %s, Rating: %s\n",
+			doc.ID, doc.Name, doc.Special, doc.Location, avgRating))
 	}
-	sb.WriteString("\nPlease type 'confirm <slot number>' to confirm your appointment.")
-
 	return sb.String()
 }
 
-func (cb *Chatbot) ConfirmAppointment(input string, user *User) string {
-	if user.SelectDoctor == nil {
-		return "You need to select a doctor first using 'select <number>'."
-	}
-	parts := strings.Fields(input)
-	if len(parts) < 2 {
-		return "Please specify the slot number to confirm (e.g. 'confirm 2')."
+type SelectDoctorHandler struct{}
 
-	}
-	slotNum, err := strconv.Atoi(parts[1])
-	if err != nil || slotNum < 1 || slotNum > 4 {
-		return "Invalid slot number. Please choose a valid slot."
-
-	}
-	futureDate := time.Now().AddDate(0, 0, 7)
-	slots := []string{"10:00 AM", "11:30 AM", "02:00 PM", "04:00 PM"}
-	return fmt.Sprintf("Your appointment with %s has been confirmed for %s at %s.", user.SelectDoctor.Name, futureDate.Format("Monday, January 2, 2006"), slots[slotNum-1])
+func (s SelectDoctorHandler) CanHandle(input string) bool {
+	return strings.HasPrefix(strings.ToLower(input), "select doctor")
 }
 
-// PHARMACY STRUCTS AND LOGIC
-
-// Pharmacy represents a medication item in the virtual pharmacy.
-type Pharmacy struct {
-	Med       string
-	Price     int
-	Available int
-	Quantity  int
+func (s SelectDoctorHandler) Handle(query Query, user *User, db *MedDataBase) string {
+	doctorID := strings.TrimPrefix(strings.ToLower(query.Content), "select doctor ")
+	for _, doc := range db.Doctors {
+		if strings.EqualFold(doc.ID, doctorID) {
+			return fmt.Sprintf("You selected Dr. %s (%s).", doc.Name, doc.Special)
+		}
+	}
+	return "Doctor not found."
 }
 
-// This also modifies the User's Cart, demonstrating behavior interaction between structs.
-func (md *MedDataBase) CheckPharmacy(input string, user *User) string {
-	pharmacyItems := []Pharmacy{
-		{"Ibuprofen", 10, 20, 0},
-		{"Paracetamol", 5, 50, 0},
-		{"Cough Syrup", 8, 10, 0},
-		{"Aspirin", 7, 30, 0},
+type BookAppointmentHandler struct{}
+
+func (b BookAppointmentHandler) CanHandle(input string) bool {
+	return strings.HasPrefix(strings.ToLower(input), "book")
+}
+
+func (b BookAppointmentHandler) Handle(query Query, user *User, db *MedDataBase) string {
+	parts := strings.Fields(query.Content)
+	if len(parts) != 3 {
+		return "Invalid format. Use: book <DoctorID> <TimeSlot>"
+	}
+	doctorID := parts[1]
+	timeSlot := parts[2]
+	for _, doc := range db.Doctors {
+		if doc.ID == doctorID {
+			db.Appointments = append(db.Appointments, Appointment{
+				UserName:   user.Name,
+				DoctorName: doc.Name,
+				TimeSlot:   timeSlot,
+			})
+			return fmt.Sprintf("Appointment booked with Dr. %s at %s.", doc.Name, timeSlot)
+		}
+	}
+	return "Doctor not found."
+}
+
+type AddToCartHandler struct{}
+
+func (a AddToCartHandler) CanHandle(input string) bool {
+	return strings.HasPrefix(strings.ToLower(input), "buy")
+}
+
+func (a AddToCartHandler) Handle(query Query, user *User, db *MedDataBase) string {
+	parts := strings.Fields(query.Content)
+	if len(parts) != 3 {
+		return "Invalid format. Use: buy <ItemName> <Quantity>"
+	}
+	itemName := parts[1]
+	quantity, err := strconv.Atoi(parts[2])
+	if err != nil || quantity <= 0 {
+		return "Please enter a valid quantity."
+	}
+	for i := range db.Cart {
+		if db.Cart[i].Name == itemName {
+			db.Cart[i].Quantity += quantity
+			return fmt.Sprintf("Updated %s quantity to %d.", itemName, db.Cart[i].Quantity)
+		}
+	}
+	db.Cart = append(db.Cart, Item{Name: itemName, Quantity: quantity})
+	return fmt.Sprintf("Added %s x%d to your cart.", itemName, quantity)
+}
+
+type RemoveFromCartHandler struct{}
+
+func (r RemoveFromCartHandler) CanHandle(input string) bool {
+	return strings.HasPrefix(strings.ToLower(input), "remove")
+}
+
+func (r RemoveFromCartHandler) Handle(query Query, user *User, db *MedDataBase) string {
+	parts := strings.Fields(query.Content)
+	if len(parts) <= 2 || len(parts) > 3 {
+		return "Invalid format. Use: remove <ItemName> [Quantity]"
+	}
+	quantity := 1
+	itemName := ""
+
+	if len(parts) == 2 {
+		itemName = parts[1]
+	} else {
+		q, err := strconv.Atoi(parts[1])
+		if err != nil || q <= 0 {
+			return "Please enter a valid quantity to remove."
+		}
+		quantity = q
+		itemName = parts[2]
 	}
 
-	if strings.HasPrefix(strings.ToLower(input), "buy") {
-		parts := strings.Fields(input)
-		if len(parts) < 2 {
-			return "Please specify the medication (e.g., 'buy Ibuprofen 2')."
-		}
-
-		medName := parts[1]
-		quantity := 1 // Default
-
-		if len(parts) >= 3 {
-			q, err := strconv.Atoi(parts[2])
-			if err == nil && q > 0 {
-				quantity = q
+	for i := range db.Cart {
+		if db.Cart[i].Name == itemName {
+			if db.Cart[i].Quantity <= quantity {
+				db.Cart = append(db.Cart[:i], db.Cart[i+1:]...)
+				return fmt.Sprintf("Removed all of %s from your cart.", itemName)
+			} else {
+				db.Cart[i].Quantity -= quantity
+				return fmt.Sprintf("Removed %d %s. Remaining: %d.", quantity, itemName, db.Cart[i].Quantity)
 			}
 		}
+	}
+	return "Item not found in your cart."
+}
 
-		for i, item := range pharmacyItems {
-			if strings.EqualFold(item.Med, medName) {
-				if item.Available >= quantity {
-					user.AddToCart(item, quantity)
-					pharmacyItems[i].Available -= quantity
-					return fmt.Sprintf("%d x %s has been added to your cart.", quantity, item.Med)
-				}
-				return fmt.Sprintf("Sorry, only %d %s available.", item.Available, item.Med)
+type ViewCartHandler struct{}
+
+func (v ViewCartHandler) CanHandle(input string) bool {
+	return strings.ToLower(input) == "view cart"
+}
+
+func (v ViewCartHandler) Handle(query Query, user *User, db *MedDataBase) string {
+	if len(db.Cart) == 0 {
+		return "Your cart is empty."
+	}
+	var sb strings.Builder
+	sb.WriteString("Your cart contains:\n")
+	for _, item := range db.Cart {
+		sb.WriteString(fmt.Sprintf("- %s x%d\n", item.Name, item.Quantity))
+	}
+	return sb.String()
+}
+
+type ViewAppointmentsHandler struct{}
+
+func (v ViewAppointmentsHandler) CanHandle(input string) bool {
+	return strings.ToLower(input) == "view appointments"
+}
+
+func (v ViewAppointmentsHandler) Handle(query Query, user *User, db *MedDataBase) string {
+	var sb strings.Builder
+	for _, a := range db.Appointments {
+		if a.UserName == user.Name {
+			sb.WriteString(fmt.Sprintf("Appointment with Dr. %s at %s\n", a.DoctorName, a.TimeSlot))
+		}
+	}
+	if sb.Len() == 0 {
+		return "You have no appointments."
+	}
+	return sb.String()
+}
+
+type DefaultHandler struct{}
+
+func (d DefaultHandler) CanHandle(input string) bool {
+	return true
+}
+
+func (d DefaultHandler) Handle(query Query, user *User, db *MedDataBase) string {
+	return "I didn't understand that. Try commands like: rate, book, pharmacy, list, or ask about symptoms like 'I have a fever'."
+}
+
+type Chatbot struct {
+	Base MedDataBase
+}
+
+func (cb *Chatbot) GenerateResponse(query Query, user *User) Response {
+	handlers := []CommandHandler{
+		PharmacyHandler{},
+		SymptomInfoHandler{},
+		RateDoctorHandler{},
+		SelectDoctorHandler{},
+		BookAppointmentHandler{},
+		AddToCartHandler{},
+		RemoveFromCartHandler{},
+		ViewCartHandler{},
+		ViewAppointmentsHandler{},
+		ListDoctorsHandler{},
+		DefaultHandler{},
+	}
+
+	for _, handler := range handlers {
+		if handler.CanHandle(query.Content) {
+			return Response{
+				Content: handler.Handle(query, user, &cb.Base),
+				Time:    time.Now(),
 			}
 		}
-		return "Medication not found."
 	}
 
-	var response strings.Builder
-	response.WriteString("Available medications in the pharmacy:\n")
-	for _, item := range pharmacyItems {
-		response.WriteString(fmt.Sprintf("- %s: $%d (Availability: %d)\n", item.Med, item.Price, item.Available))
-	}
-	return response.String()
+	return Response{Content: "Unexpected error.", Time: time.Now()}
 }
